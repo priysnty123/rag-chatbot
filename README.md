@@ -1,4 +1,4 @@
-# PDF RAG Chatbot
+# PDF RAG Chatbot     Link = https://rag-assignment-9129.streamlit.app/
 
 A Streamlit-based retrieval-augmented generation (RAG) chatbot that answers questions using the contents of a local PDF. The application retrieves relevant PDF chunks from Pinecone and uses Groq to generate concise answers with page references.
 

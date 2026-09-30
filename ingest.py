@@ -26,10 +26,7 @@ from config import (
     PDF_PATH
 )
 
-
-# =========================================================
 # CONFIGURATION
-# =========================================================
 
 EMBEDDING_DIMENSION = 768
 
@@ -38,9 +35,7 @@ CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
 
 
-# =========================================================
 # EMBEDDING MODEL
-# =========================================================
 
 embeddings = HuggingFaceEmbeddings(
     model_name=EMBEDDING_MODEL,
@@ -55,9 +50,7 @@ embeddings = HuggingFaceEmbeddings(
 )
 
 
-# =========================================================
 # LOAD PDF
-# =========================================================
 
 def load_pdf():
 
@@ -94,9 +87,7 @@ def load_pdf():
     return documents
 
 
-# =========================================================
 # CHUNK DOCUMENT
-# =========================================================
 
 def split_documents(documents):
 
@@ -122,9 +113,7 @@ def split_documents(documents):
     return chunks
 
 
-# =========================================================
 # CONNECT TO PINECONE
-# =========================================================
 
 def get_pinecone_index():
 
@@ -161,10 +150,7 @@ def get_pinecone_index():
         PINECONE_INDEX_NAME
     )
 
-
-# =========================================================
 # CREATE EMBEDDINGS + STORE IN PINECONE
-# =========================================================
 
 def store_documents(chunks):
 
@@ -224,9 +210,7 @@ def store_documents(chunks):
     )
 
 
-# =========================================================
 # MAIN INGESTION PIPELINE
-# =========================================================
 
 def ingest():
 
@@ -273,7 +257,7 @@ def ingest():
 
 
     print(
-        "\n========== INGESTION COMPLETE ==========\n"
+        "\n=== INGESTION COMPLETE ===\n"
     )
 
 

@@ -32,9 +32,7 @@ from config import (
 )
 
 
-# =========================================================
 # EMBEDDING MODEL
-# =========================================================
 
 embeddings = HuggingFaceEmbeddings(
 
@@ -50,9 +48,7 @@ embeddings = HuggingFaceEmbeddings(
 )
 
 
-# =========================================================
 # PINECONE
-# =========================================================
 
 pc = Pinecone(
     api_key=PINECONE_API_KEY
@@ -63,9 +59,7 @@ index = pc.Index(
 )
 
 
-# =========================================================
 # CHATGROQ
-# =========================================================
 
 llm = ChatGroq(
 
@@ -77,9 +71,7 @@ llm = ChatGroq(
 )
 
 
-# =========================================================
 # PROMPT
-# =========================================================
 
 prompt = ChatPromptTemplate.from_messages(
     [
@@ -128,9 +120,8 @@ CONTEXT:
 )
 
 
-# =========================================================
 # LANGGRAPH STATE
-# =========================================================
+
 
 class RAGState(TypedDict):
 
@@ -142,10 +133,12 @@ class RAGState(TypedDict):
 
     sources: List[str]
 
+    retrieved_context: List[str]
 
-# =========================================================
+    confidence: float
+
+
 # RETRIEVE FROM PINECONE
-# =========================================================
 
 def retrieve(
     state: RAGState
@@ -154,18 +147,13 @@ def retrieve(
     question = state["question"]
 
 
-    # -----------------------------------------------------
     # Generate embedding for user question
-    # -----------------------------------------------------
 
     query_vector = embeddings.embed_query(
         question
     )
 
-
-    # -----------------------------------------------------
     # Search Pinecone
-    # -----------------------------------------------------
 
     results = index.query(
 
@@ -229,9 +217,7 @@ def retrieve(
     }
 
 
-# =========================================================
 # GENERATE ANSWER
-# =========================================================
 
 def generate(
     state: RAGState
@@ -242,9 +228,7 @@ def generate(
     documents = state["context"]
 
 
-    # -----------------------------------------------------
     # No documents found
-    # -----------------------------------------------------
 
     if not documents:
 
@@ -254,13 +238,15 @@ def generate(
                 "I couldn't find the answer to this "
                 "question in the provided document.",
 
-            "sources": []
+            "sources": [],
+
+            "retrieved_context": [],
+
+            "confidence": 0.0
         }
 
 
-    # -----------------------------------------------------
     # Create context
-    # -----------------------------------------------------
 
     context = "\n\n".join(
 
@@ -277,9 +263,7 @@ PAGE {doc.metadata.get("page", "Unknown")}
     )
 
 
-    # -----------------------------------------------------
     # Generate prompt
-    # -----------------------------------------------------
 
     messages = prompt.invoke(
 
@@ -291,20 +275,20 @@ PAGE {doc.metadata.get("page", "Unknown")}
     )
 
 
-    # -----------------------------------------------------
     # Call ChatGroq
-    # -----------------------------------------------------
 
     response = llm.invoke(
         messages
     )
 
 
-    # -----------------------------------------------------
     # Sources
-    # -----------------------------------------------------
 
     sources = []
+
+    scores = []
+
+    retrieved_context = []
 
 
     for doc in documents:
@@ -315,6 +299,20 @@ PAGE {doc.metadata.get("page", "Unknown")}
         )
 
         source = f"Page {page}"
+
+        score = doc.metadata.get(
+            "score",
+            0.0
+        )
+
+        scores.append(score)
+
+        source = f"{source} (score: {score:.4f})"
+
+        retrieved_context.append(
+            f"Page {page} (score: {score:.4f})\n\n"
+            f"{doc.page_content}"
+        )
 
 
         if source not in sources:
@@ -328,13 +326,16 @@ PAGE {doc.metadata.get("page", "Unknown")}
 
         "answer": response.content,
 
-        "sources": sources
+        "sources": sources,
+
+        "retrieved_context": retrieved_context,
+
+        "confidence": max(scores) if scores else 0.0
     }
 
 
-# =========================================================
 # BUILD LANGGRAPH
-# =========================================================
+
 
 def create_graph():
 
@@ -379,9 +380,7 @@ def create_graph():
 rag_graph = create_graph()
 
 
-# =========================================================
 # STREAMLIT CONFIG
-# =========================================================
 
 st.set_page_config(
 
@@ -394,7 +393,7 @@ st.set_page_config(
 
 
 st.title(
-    "📚 PDF RAG Chatbot"
+    "PDF RAG Chatbot"
 )
 
 
@@ -404,9 +403,7 @@ st.caption(
 )
 
 
-# =========================================================
 # SIDEBAR
-# =========================================================
 
 with st.sidebar:
 
@@ -450,9 +447,7 @@ with st.sidebar:
         st.rerun()
 
 
-# =========================================================
 # CHAT HISTORY
-# =========================================================
 
 if "messages" not in st.session_state:
 
@@ -488,10 +483,24 @@ for message in st.session_state.messages:
                         f"• {source}"
                     )
 
+        if message.get("retrieved_context"):
 
-# =========================================================
+            with st.expander(
+                "Retrieved context chunks"
+            ):
+
+                for chunk in message["retrieved_context"]:
+
+                    st.markdown(chunk)
+
+        if "confidence" in message:
+
+            st.caption(
+                f"Confidence score: {message['confidence']:.4f}"
+            )
+
+
 # USER INPUT
-# =========================================================
 
 question = st.chat_input(
 
@@ -501,9 +510,7 @@ question = st.chat_input(
 
 if question:
 
-    # -----------------------------------------------------
     # Display user message
-    # -----------------------------------------------------
 
     st.session_state.messages.append(
 
@@ -525,9 +532,7 @@ if question:
         )
 
 
-    # -----------------------------------------------------
     # Generate answer
-    # -----------------------------------------------------
 
     with st.chat_message(
         "assistant"
@@ -547,7 +552,11 @@ if question:
 
                     "answer": "",
 
-                    "sources": []
+                    "sources": [],
+
+                    "retrieved_context": [],
+
+                    "confidence": 0.0
                 }
             )
 
@@ -559,15 +568,37 @@ if question:
             []
         )
 
+        retrieved_context = result.get(
+            "retrieved_context",
+            []
+        )
+
+        confidence = result.get(
+            "confidence",
+            0.0
+        )
+
 
         st.markdown(
             answer
         )
 
+        st.caption(
+            f"Confidence score: {confidence:.4f}"
+        )
 
-        # -------------------------------------------------
+        if retrieved_context:
+
+            with st.expander(
+                "Retrieved context chunks"
+            ):
+
+                for chunk in retrieved_context:
+
+                    st.markdown(chunk)
+
+
         # Show sources
-        # -------------------------------------------------
 
         if sources:
 
@@ -582,9 +613,7 @@ if question:
                     )
 
 
-    # -----------------------------------------------------
     # Save chat
-    # -----------------------------------------------------
 
     st.session_state.messages.append(
 
@@ -594,6 +623,10 @@ if question:
 
             "content": answer,
 
-            "sources": sources
+                    "sources": sources,
+
+                    "retrieved_context": retrieved_context,
+
+                    "confidence": confidence
         }
     )
